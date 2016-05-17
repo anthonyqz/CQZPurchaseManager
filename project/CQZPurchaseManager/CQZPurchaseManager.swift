@@ -11,28 +11,41 @@ import StoreKit
 
 public class CQZPurchaseManager:NSObject {
     
-    //MARK: - Singleton
+    //MARK:- public properties
     public static let shared = CQZPurchaseManager()
+    public var productsIdsList:[String] {
+        get{
+            return Array(productsIdsListSet)
+        }
+        set{
+            productsIdsListSet = Set(newValue)
+            loadProducts()
+        }
+    }
+    public private(set) var productsList = [SKProduct]()
     
-    private let identifiers = Set(arrayLiteral: "ejemplopurchase_retirar_publicidad")
+    //MARK:- privates properties
+    private var productsIdsListSet = Set<String>()
+    private var productRestore:((identifier:String)->())?
     
-    //MARK: - public properties
-    public var products = [SKProduct]()
-    
-    //MARK: - public methods
-    private func loadProducts() {
-        let requestProducts = SKProductsRequest(productIdentifiers: identifiers)
-        requestProducts.delegate = self
-        requestProducts.start()
+    //MARK:- public func
+    public func canMakePayments() -> Bool {
+        return SKPaymentQueue.canMakePayments()
     }
     
-    public func restoreProducts() {
-        SKPaymentQueue.defaultQueue().addTransactionObserver(self)
+    public func restorePurchasedProducts(productRestore:(identifier:String)->()) {
+        self.productRestore = productRestore
         SKPaymentQueue.defaultQueue().restoreCompletedTransactions()
     }
     
-    public func canPayment() -> Bool{
-        return SKPaymentQueue.canMakePayments()
+    //MARK:- private func
+    private func loadProducts() {
+        let productsRequest = SKProductsRequest(productIdentifiers: productsIdsListSet)
+        productsRequest.delegate = self
+        productsRequest.start()
+        //set the delegate to the payment
+        SKPaymentQueue.defaultQueue().addTransactionObserver(self)
+        
     }
     
     //MARK: - override methods
@@ -43,41 +56,35 @@ public class CQZPurchaseManager:NSObject {
 }
 
 extension CQZPurchaseManager:SKProductsRequestDelegate {
-    
+    //obtener la lita de productos
     public func productsRequest(request: SKProductsRequest, didReceiveResponse response: SKProductsResponse) {
-        
-        products = response.products
-        
+        productsList = response.products
     }
-    
 }
 
 extension CQZPurchaseManager:SKPaymentTransactionObserver {
-    
     public func paymentQueue(queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
         
         for transaction in transactions {
-            let state = transaction.transactionState
-            
-            switch state {
-            case .Purchasing:
-                break
+            switch transaction.transactionState {
             case .Failed:
-                print("fallo")
+                print("fallo la compra")
                 SKPaymentQueue.defaultQueue().finishTransaction(transaction)
                 break
+            case .Purchasing:
+                break
             case .Purchased:
-                print("item comprado: \(transaction.payment.productIdentifier)")
+                print("comprado: \(transaction.payment.productIdentifier)")
                 SKPaymentQueue.defaultQueue().finishTransaction(transaction)
                 break
             case .Restored:
-                print("item restaurado: \(transaction.payment.productIdentifier)")
+                productRestore?(identifier: transaction.payment.productIdentifier)
+                //                print("restaurado: \(transaction.payment.productIdentifier)")
                 SKPaymentQueue.defaultQueue().finishTransaction(transaction)
                 break
             case .Deferred:
                 break
             }
-            
         }
         
     }
